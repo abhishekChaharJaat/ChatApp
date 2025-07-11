@@ -12,7 +12,7 @@ import { setActiveUser } from "../Redux/slices/userSlice";
 
 const WebsocketContext = createContext();
 
-const WebsocketProvider = ({ children, url }) => {
+const WebsocketProvider = ({ children }) => {
   const dispatch = useDispatch();
   const { userId } = useAuth();
   const token = useSelector((state) => state.user.token);
@@ -21,20 +21,18 @@ const WebsocketProvider = ({ children, url }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
 
-  // Handle incoming message types
-  const handleIncomingMessage = (data) => {
-    if (data.type === "new_message") {
-      dispatch(addMessage(data));
-    } else if (data.type === "active_status") {
-      dispatch(setActiveUser(data.users));
-    }
+  const getWebSocketUrl = () => {
+    const isLocal = window.location.hostname === "localhost";
+    const baseUrl = isLocal
+      ? "ws://localhost:8080/ws"
+      : "wss://chatappbackend-dofk.onrender.com/ws";
+    return `${baseUrl}?userId=${userId}&token=${token}`;
   };
 
   useEffect(() => {
     if (!token || !userId) return;
 
-    const wsUrl = `${url}?userId=${userId}&token=${token}`;
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(getWebSocketUrl());
     socketRef.current = ws;
 
     ws.onopen = () => {
@@ -46,7 +44,11 @@ const WebsocketProvider = ({ children, url }) => {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        handleIncomingMessage(data);
+        if (data.type === "new_message") {
+          dispatch(addMessage(data));
+        } else if (data.type === "active_status") {
+          dispatch(setActiveUser(data.users));
+        }
       } catch (err) {
         console.error("❌ Failed to parse WebSocket message:", err);
       }
@@ -67,9 +69,8 @@ const WebsocketProvider = ({ children, url }) => {
       ws.close();
       socketRef.current = null;
     };
-  }, [url, token, userId, dispatch]);
+  }, [token, userId, dispatch]);
 
-  // Helper to format message payload
   const createMessage = (type, payload, recipientId, senderId) => ({
     type,
     recipientId,
@@ -77,7 +78,6 @@ const WebsocketProvider = ({ children, url }) => {
     senderId,
   });
 
-  // Send message to WebSocket server
   const sendMessage = (message) => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(message));

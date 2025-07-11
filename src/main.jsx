@@ -56,6 +56,13 @@ const localization = {
   },
 };
 
+const getWebSocketUrl = () => {
+  const isLocal = window.location.hostname === "localhost";
+  return isLocal
+    ? "ws://localhost:8080/ws"
+    : "wss://chatappbackend-dofk.onrender.com/ws";
+};
+
 createRoot(document.getElementById("root")).render(
   <Provider store={store}>
     <ClerkProvider
@@ -64,7 +71,7 @@ createRoot(document.getElementById("root")).render(
       appearance={appearance}
       afterSignOutUrl="/"
     >
-      <WebsocketProvider url="ws://localhost:8080/ws">
+      <WebsocketProvider url={getWebSocketUrl()}>
         <App />
       </WebsocketProvider>
     </ClerkProvider>
