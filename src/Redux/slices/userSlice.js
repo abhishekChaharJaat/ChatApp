@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-
+import { baseUrl } from "../baseUrl";
 // fetchAllUsers.js
 
 export const fetchAllUsers = createAsyncThunk(
@@ -12,7 +12,7 @@ export const fetchAllUsers = createAsyncThunk(
         throw new Error("No token available");
       }
 
-      const response = await fetch("http://localhost:8080/all-users", {
+      const response = await fetch(`${baseUrl}/all-users`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",

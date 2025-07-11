@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+} from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { useSelector, useDispatch } from "react-redux";
 import { addMessage } from "../Redux/slices/messageSlice";
@@ -10,13 +16,13 @@ const WebsocketProvider = ({ children, url }) => {
   const dispatch = useDispatch();
   const { userId } = useAuth();
   const token = useSelector((state) => state.user.token);
+
+  const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [socket, setSocket] = useState(null);
-  const [messages, setMessages] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState("Disconnected");
 
-  // Handle received messages
-  const receivedMessage = (data) => {
+  // Handle incoming message types
+  const handleIncomingMessage = (data) => {
     if (data.type === "new_message") {
       dispatch(addMessage(data));
     } else if (data.type === "active_status") {
@@ -25,76 +31,58 @@ const WebsocketProvider = ({ children, url }) => {
   };
 
   useEffect(() => {
-    const connectWebSocket = async () => {
+    if (!token || !userId) return;
+
+    const wsUrl = `${url}?userId=${userId}&token=${token}`;
+    const ws = new WebSocket(wsUrl);
+    socketRef.current = ws;
+
+    ws.onopen = () => {
+      console.log("✅ WebSocket Connected");
+      setIsConnected(true);
+      setConnectionStatus("Connected");
+    };
+
+    ws.onmessage = (event) => {
       try {
-        const wsUrl = `${url}?token=${token}&userId=${userId}`;
-        const webSocket = new WebSocket(wsUrl);
-        setSocket(webSocket);
-
-        webSocket.onopen = () => {
-          console.log("WebSocket Connected");
-          setIsConnected(true);
-          setConnectionStatus("Connected");
-        };
-
-        webSocket.onmessage = (event) => {
-          try {
-            const receivedData = JSON.parse(event.data);
-            receivedMessage(receivedData);
-          } catch (error) {
-            console.error("Error parsing message:", error);
-          }
-        };
-
-        webSocket.onclose = () => {
-          console.log("WebSocket Disconnected");
-          setIsConnected(false);
-          setSocket(null);
-        };
-
-        webSocket.onerror = (error) => {
-          console.error("WebSocket Error:", error);
-        };
-      } catch (error) {
-        console.error("Error connecting to WebSocket:", error);
+        const data = JSON.parse(event.data);
+        handleIncomingMessage(data);
+      } catch (err) {
+        console.error("❌ Failed to parse WebSocket message:", err);
       }
     };
 
-    if (token) {
-      connectWebSocket();
-    }
+    ws.onerror = (err) => {
+      console.error("❌ WebSocket error:", err);
+    };
 
-    // Cleanup on unmount or when dependencies change
+    ws.onclose = () => {
+      console.log("❌ WebSocket Disconnected");
+      setIsConnected(false);
+      setConnectionStatus("Disconnected");
+      socketRef.current = null;
+    };
+
     return () => {
-      if (socket) {
-        socket.close();
-        setSocket(null);
-      }
+      ws.close();
+      socketRef.current = null;
     };
-  }, [url, token, userId, dispatch, socket]);
+  }, [url, token, userId, dispatch]);
 
-  const createMessage = (type, payload, recipientId, senderId) => {
-    return {
-      type: type,
-      recipientId: recipientId,
-      content: payload,
-      senderId: senderId,
-    };
-  };
+  // Helper to format message payload
+  const createMessage = (type, payload, recipientId, senderId) => ({
+    type,
+    recipientId,
+    content: payload,
+    senderId,
+  });
 
+  // Send message to WebSocket server
   const sendMessage = (message) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        text: message.content,
-        received: false,
-      },
-    ]);
-
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(message));
     } else {
-      console.error("WebSocket is not connected.");
+      console.error("⚠️ WebSocket is not connected.");
     }
   };
 
@@ -102,9 +90,7 @@ const WebsocketProvider = ({ children, url }) => {
     <WebsocketContext.Provider
       value={{
         isConnected,
-        messages,
         connectionStatus,
-        setMessages,
         createMessage,
         sendMessage,
       }}
@@ -114,9 +100,6 @@ const WebsocketProvider = ({ children, url }) => {
   );
 };
 
-export const useWebsocket = () => {
-  const context = useContext(WebsocketContext);
-  return context;
-};
+export const useWebsocket = () => useContext(WebsocketContext);
 
 export default WebsocketProvider;

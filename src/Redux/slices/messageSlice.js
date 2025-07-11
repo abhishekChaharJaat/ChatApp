@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import axios from "axios";
-const baseUrl = "http://localhost:8080";
+import { baseUrl } from "../baseUrl";
 
 // Create async thunk for fetching messages
 
